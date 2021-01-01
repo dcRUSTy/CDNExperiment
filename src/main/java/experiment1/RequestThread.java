@@ -64,8 +64,8 @@ public class RequestThread extends Thread {
             try {
                 HttpsURLConnection connectionToDoHServer = (HttpsURLConnection) new URL(
                         "https://8.8.8.8/resolve?name=" + domain + "&type=A&ecs=" + clientIP).openConnection();
-                connectionToDoHServer.setConnectTimeout(1000);
-                connectionToDoHServer.setReadTimeout(1000);
+                connectionToDoHServer.setConnectTimeout(3000);
+                connectionToDoHServer.setReadTimeout(3000);
                 BufferedReader in = new BufferedReader(new InputStreamReader(connectionToDoHServer.getInputStream()));
                 String inputLine;
                 StringBuffer responseFromDoHServer = new StringBuffer();
@@ -78,6 +78,8 @@ public class RequestThread extends Thread {
                 connectionToDoHServer.disconnect();
                 JSONObject responseJson = (JSONObject) new JSONParser().parse(response);
                 JSONArray responseAnswerJsonArray = (JSONArray) responseJson.get("Answer");
+                if (responseAnswerJsonArray == null)
+                    return new String[0];
                 for (Object object : responseAnswerJsonArray) {
                     Long answerType = (Long) ((JSONObject) object).get("type");
                     String answerData = (String) ((JSONObject) object).get("data");
@@ -109,6 +111,8 @@ public class RequestThread extends Thread {
                 return cachedEntry;
             }
             String[] allIPAddressesOfDomain = findAllIPAddressOfDomain(host, new String[]{"", "8.8.8.8"});
+            if (allIPAddressesOfDomain.length == 0)
+                return "127.127.127.127";
             // NEEDS REFACTORING - ONLY FOR PERFORMANCE IN RACE CONDITIONS
             ProxyServer.dnsCache.put(host, allIPAddressesOfDomain[0]);
             synchronized (ProxyServer.lock) {
@@ -145,6 +149,8 @@ public class RequestThread extends Thread {
                     && requestHeaders[requestHeadersReadLength - 2] != '\r'
                     && requestHeaders[requestHeadersReadLength - 3] != '\n'
                     && requestHeaders[requestHeadersReadLength - 4] != '\r');
+            if (requestHeadersReadLength <= 0)
+                return;
             String[] lineInHeaders = new String(requestHeaders).substring(0, requestHeadersReadLength).split("\r\n");
             String method = lineInHeaders[0].split(" ")[0];
             String path = lineInHeaders[0].split(" ")[1];
@@ -158,8 +164,11 @@ public class RequestThread extends Thread {
             Socket serverRequestSocket = new Socket();
             serverRequestSocket.setTcpNoDelay(true);
             serverRequestSocket.setSoTimeout(2000);
+            String iPv4FromDoH = getIPv4FromDoH(hostNameInActualHost, Integer.valueOf(portInActualHost));
+            if (iPv4FromDoH.equals("127.127.127.127"))
+                return;
             serverRequestSocket.connect(
-                    new InetSocketAddress(getIPv4FromDoH(hostNameInActualHost, Integer.valueOf(portInActualHost)),
+                    new InetSocketAddress(iPv4FromDoH,
                             Integer.valueOf(portInActualHost)));
             System.out.println("CONNECTED " + hostNameInActualHost + ":" + portInActualHost);
             clientRequestSocketOutputStream
